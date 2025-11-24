@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
+import SettingsButton from './components/SettingsButton';
+import SettingsDrawer from './components/SettingsDrawer';
+import { useSettings } from './hooks/useSettings';
 import ThemeToggle from './components/ThemeToggle';
 import { api } from './api';
 import './App.css';
@@ -10,10 +13,12 @@ function App() {
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [theme, setTheme] = useState(() => {
     if (typeof window === 'undefined') return 'light';
     return localStorage.getItem('theme') || 'light';
   });
+  const { settings, updateSettings, resetSettings } = useSettings();
 
   // Load conversations on mount
   useEffect(() => {
@@ -70,6 +75,11 @@ function App() {
 
   const handleSelectConversation = (id) => {
     setCurrentConversationId(id);
+  };
+
+  const handleSaveSettings = (updated) => {
+    updateSettings(updated);
+    setIsSettingsOpen(false);
   };
 
   const handleSendMessage = async (content) => {
@@ -208,6 +218,16 @@ function App() {
         conversation={currentConversation}
         onSendMessage={handleSendMessage}
         isLoading={isLoading}
+      />
+      <SettingsButton onClick={() => setIsSettingsOpen(true)} />
+      <SettingsDrawer
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={settings}
+        onSave={handleSaveSettings}
+        onReset={() => {
+          resetSettings();
+        }}
       />
       <ThemeToggle theme={theme} onToggle={toggleTheme} />
     </div>
