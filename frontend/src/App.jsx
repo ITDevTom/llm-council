@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
+import ThemeToggle from './components/ThemeToggle';
 import { api } from './api';
 import './App.css';
 
@@ -9,11 +10,21 @@ function App() {
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === 'undefined') return 'light';
+    return localStorage.getItem('theme') || 'light';
+  });
 
   // Load conversations on mount
   useEffect(() => {
     loadConversations();
   }, []);
+
+  // Sync theme to document + storage
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   // Load conversation details when selected
   useEffect(() => {
@@ -21,6 +32,10 @@ function App() {
       loadConversation(currentConversationId);
     }
   }, [currentConversationId]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
 
   const loadConversations = async () => {
     try {
@@ -182,7 +197,7 @@ function App() {
   };
 
   return (
-    <div className="app">
+    <div className={`app ${theme}`}>
       <Sidebar
         conversations={conversations}
         currentConversationId={currentConversationId}
@@ -194,6 +209,7 @@ function App() {
         onSendMessage={handleSendMessage}
         isLoading={isLoading}
       />
+      <ThemeToggle theme={theme} onToggle={toggleTheme} />
     </div>
   );
 }
