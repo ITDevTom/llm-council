@@ -11,6 +11,8 @@ import asyncio
 
 from . import storage
 from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings
+from . import settings_service
+from . import model_catalog
 
 app = FastAPI(title="LLM Council API")
 
@@ -50,10 +52,72 @@ class Conversation(BaseModel):
     messages: List[Dict[str, Any]]
 
 
+class SettingsPayload(BaseModel):
+    """Settings payload."""
+    council_models: List[str]
+    chairman_model: str
+
+
+class ModelsResponse(BaseModel):
+    """Available models response."""
+    source: str
+    models: List[Dict[str, Any]]
+
+
 @app.get("/")
 async def root():
     """Health check endpoint."""
     return {"status": "ok", "service": "LLM Council API"}
+
+
+@app.get("/api/models", response_model=ModelsResponse)
+async def list_models(force_refresh: bool = False):
+    """List available OpenRouter models (live, cached, or snapshot fallback)."""
+    models, source = await model_catalog.get_models(force_refresh=force_refresh)
+    return {"models": models, "source": source}
+
+
+@app.get("/api/settings", response_model=SettingsPayload)
+async def get_settings():
+    """Return the currently active council settings."""
+    return settings_service.get_settings()
+
+
+def _validate_settings(payload: SettingsPayload, available_ids: List[str]) -> None:
+    if not payload.council_models:
+        raise HTTPException(status_code=400, detail="council_models must not be empty")
+    if any(not m.strip() for m in payload.council_models):
+        raise HTTPException(status_code=400, detail="council_models contains empty entries")
+    if not payload.chairman_model or not payload.chairman_model.strip():
+        raise HTTPException(status_code=400, detail="chairman_model must not be empty")
+
+    # Validate against catalog if data exists
+    if available_ids:
+        missing = [m for m in payload.council_models if m not in available_ids]
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown council models: {', '.join(missing)}"
+            )
+        if payload.chairman_model not in available_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown chairman_model: {payload.chairman_model}"
+            )
+
+
+@app.post("/api/settings", response_model=SettingsPayload)
+async def save_settings(payload: SettingsPayload):
+    """
+    Save council/chairman settings.
+    Validates against the available models list when accessible.
+    """
+    models, _ = await model_catalog.get_models()
+    available_ids = [m["id"] for m in models if m.get("id")] if models else []
+
+    _validate_settings(payload, available_ids)
+
+    return settings_service.save_settings(payload.council_models, payload.chairman_model)
 
 
 @app.get("/api/conversations", response_model=List[ConversationMetadata])
@@ -101,9 +165,13 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
         title = await generate_conversation_title(request.content)
         storage.update_conversation_title(conversation_id, title)
 
+    settings = settings_service.get_settings()
+
     # Run the 3-stage council process
     stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
-        request.content
+        request.content,
+        settings["council_models"],
+        settings["chairman_model"],
     )
 
     # Add assistant message with all stages
@@ -147,20 +215,34 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             if is_first_message:
                 title_task = asyncio.create_task(generate_conversation_title(request.content))
 
+            settings = settings_service.get_settings()
+
             # Stage 1: Collect responses
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            stage1_results = await stage1_collect_responses(request.content)
+            stage1_results = await stage1_collect_responses(
+                request.content,
+                settings["council_models"],
+            )
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
             # Stage 2: Collect rankings
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_model = await stage2_collect_rankings(request.content, stage1_results)
+            stage2_results, label_to_model = await stage2_collect_rankings(
+                request.content,
+                stage1_results,
+                settings["council_models"],
+            )
             aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
             yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
 
             # Stage 3: Synthesize final answer
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
-            stage3_result = await stage3_synthesize_final(request.content, stage1_results, stage2_results)
+            stage3_result = await stage3_synthesize_final(
+                request.content,
+                stage1_results,
+                stage2_results,
+                settings["chairman_model"],
+            )
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
             # Wait for title generation if it was started

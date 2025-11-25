@@ -42,20 +42,15 @@ OPENROUTER_API_KEY=sk-or-v1-...
 
 Get your API key at [openrouter.ai](https://openrouter.ai/). Make sure to purchase the credits you need, or sign up for automatic top up.
 
-### 3. Configure Models (Optional)
+### 3. Configure Models (via UI)
 
-Edit `backend/config.py` to customize the council:
+You can now select council members and the chairman from the Settings panel (gear icon, bottom-right):
 
-```python
-COUNCIL_MODELS = [
-    "openai/gpt-5.1",
-    "google/gemini-3-pro-preview",
-    "anthropic/claude-sonnet-4.5",
-    "x-ai/grok-4",
-]
+- Backend loads/saves choices in `data/settings.json` via `/api/settings`.
+- Available models come from OpenRouter `/models` (cached with fallback to `data/availablemodels/openrouter.json`).
+- The UI lets you pick human-readable names (e.g., “Anthropic: Claude Opus 4.5”) while using the OpenRouter model `id` under the hood.
 
-CHAIRMAN_MODEL = "google/gemini-3-pro-preview"
-```
+If you prefer static defaults, `backend/config.py` still provides the initial values used when no saved settings exist.
 
 ## Running the Application
 

@@ -6,6 +6,48 @@ const API_BASE = 'http://localhost:8001';
 
 export const api = {
   /**
+   * List available models from backend.
+   */
+  async listModels(forceRefresh = false) {
+    const url = new URL(`${API_BASE}/api/models`);
+    if (forceRefresh) {
+      url.searchParams.set('force_refresh', 'true');
+    }
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      throw new Error('Failed to list models');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get saved council settings.
+   */
+  async getSettings() {
+    const response = await fetch(`${API_BASE}/api/settings`);
+    if (!response.ok) {
+      throw new Error('Failed to load settings');
+    }
+    return response.json();
+  },
+
+  /**
+   * Save council settings.
+   */
+  async saveSettings(payload) {
+    const response = await fetch(`${API_BASE}/api/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || 'Failed to save settings');
+    }
+    return response.json();
+  },
+
+  /**
    * List all conversations.
    */
   async listConversations() {
