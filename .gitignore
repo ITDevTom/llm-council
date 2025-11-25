@@ -1,16 +1,39 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+*.pyo
+*.pyd
+*.so
+*.egg-info
 build/
 dist/
 wheels/
-*.egg-info
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
 
 # Virtual environments
 .venv
-
-# Keys and secrets
 .env
+.env.*
+.python-version
+
+# Logs and local artifacts
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
 
 # Data files
 data/
@@ -19,3 +42,6 @@ data/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/.eslintcache
+frontend/.turbo
+frontend/.parcel-cache
