@@ -3,9 +3,9 @@ import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
 import SettingsButton from './components/SettingsButton';
 import SettingsDrawer from './components/SettingsDrawer';
-import { useSettings } from './hooks/useSettings';
 import ThemeToggle from './components/ThemeToggle';
 import { api } from './api';
+import { DEFAULT_SETTINGS } from './settings/defaults';
 import './App.css';
 
 function App() {
@@ -14,15 +14,21 @@ function App() {
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [settingsError, setSettingsError] = useState(null);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [models, setModels] = useState([]);
+  const [modelsSource, setModelsSource] = useState(null);
   const [theme, setTheme] = useState(() => {
     if (typeof window === 'undefined') return 'light';
     return localStorage.getItem('theme') || 'light';
   });
-  const { settings, updateSettings, resetSettings } = useSettings();
 
   // Load conversations on mount
   useEffect(() => {
     loadConversations();
+    loadSettingsAndModels();
   }, []);
 
   // Sync theme to document + storage
@@ -77,9 +83,43 @@ function App() {
     setCurrentConversationId(id);
   };
 
-  const handleSaveSettings = (updated) => {
-    updateSettings(updated);
-    setIsSettingsOpen(false);
+  const loadSettingsAndModels = async () => {
+    setSettingsLoading(true);
+    setSettingsError(null);
+    try {
+      const [settingsResp, modelsResp] = await Promise.all([
+        api.getSettings(),
+        api.listModels(),
+      ]);
+      setSettings(settingsResp);
+      setModels(modelsResp.models || []);
+      setModelsSource(modelsResp.source || null);
+    } catch (error) {
+      console.error('Failed to load settings/models:', error);
+      setSettingsError('Failed to load settings or models. Using defaults.');
+      setSettings(DEFAULT_SETTINGS);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const handleSaveSettings = async (updated) => {
+    setSettingsSaving(true);
+    setSettingsError(null);
+    try {
+      const saved = await api.saveSettings(updated);
+      setSettings(saved);
+      setIsSettingsOpen(false);
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      setSettingsError(error.message || 'Failed to save settings');
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  const handleResetSettings = () => {
+    handleSaveSettings(DEFAULT_SETTINGS);
   };
 
   const handleSendMessage = async (content) => {
@@ -219,15 +259,23 @@ function App() {
         onSendMessage={handleSendMessage}
         isLoading={isLoading}
       />
-      <SettingsButton onClick={() => setIsSettingsOpen(true)} />
+      <SettingsButton
+        onClick={() => {
+          setIsSettingsOpen(true);
+        }}
+      />
       <SettingsDrawer
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         onSave={handleSaveSettings}
-        onReset={() => {
-          resetSettings();
-        }}
+        onReset={handleResetSettings}
+        models={models}
+        modelsSource={modelsSource}
+        isLoading={settingsLoading}
+        isSaving={settingsSaving}
+        error={settingsError}
+        onReload={loadSettingsAndModels}
       />
       <ThemeToggle theme={theme} onToggle={toggleTheme} />
     </div>

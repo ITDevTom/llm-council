@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './SettingsDrawer.css';
 
 export default function SettingsDrawer({
@@ -7,16 +7,39 @@ export default function SettingsDrawer({
   settings,
   onSave,
   onReset,
+  models,
+  modelsSource,
+  isLoading,
+  isSaving,
+  error,
+  onReload,
 }) {
-  const [councilModels, setCouncilModels] = useState(settings.councilModels);
-  const [chairmanModel, setChairmanModel] = useState(settings.chairmanModel);
+  const [councilModels, setCouncilModels] = useState([]);
+  const [chairmanModel, setChairmanModel] = useState('');
+
+  // Precompute model options before any early returns to keep hooks order stable
+  const modelOptions = useMemo(() => {
+    const base = Array.isArray(models) ? [...models] : [];
+    const existingIds = new Set(base.map((m) => m.id));
+    const extras = [...(settings?.council_models || []), settings?.chairman_model || ''].filter(Boolean);
+    extras.forEach((id) => {
+      if (!existingIds.has(id)) {
+        base.push({ id, label: id });
+      }
+    });
+    return base.sort((a, b) => a.label.localeCompare(b.label));
+  }, [models, settings]);
 
   useEffect(() => {
-    setCouncilModels(settings.councilModels);
-    setChairmanModel(settings.chairmanModel);
+    if (isOpen) {
+      setCouncilModels(settings?.council_models || []);
+      setChairmanModel(settings?.chairman_model || '');
+    }
   }, [settings, isOpen]);
 
   if (!isOpen) return null;
+
+  const hasModels = modelOptions.length > 0;
 
   const handleMemberChange = (index, value) => {
     setCouncilModels((prev) => {
@@ -27,7 +50,7 @@ export default function SettingsDrawer({
   };
 
   const handleAddMember = () => {
-    setCouncilModels((prev) => [...prev, '']);
+    setCouncilModels((prev) => [...prev, hasModels ? (modelOptions[0]?.id || '') : '']);
   };
 
   const handleRemoveMember = (index) => {
@@ -39,12 +62,60 @@ export default function SettingsDrawer({
     const normalizedCouncil = councilModels
       .map((m) => m.trim())
       .filter((m) => m.length > 0);
-    const chairman = chairmanModel.trim() || settings.chairmanModel;
+    const chairman = chairmanModel.trim() || normalizedCouncil[0] || settings?.chairman_model || '';
     onSave({
-      councilModels: normalizedCouncil,
-      chairmanModel: chairman,
+      council_models: normalizedCouncil,
+      chairman_model: chairman,
     });
   };
+
+  const renderCouncilInput = (value, index) => {
+    if (hasModels) {
+      return (
+        <select
+          value={value}
+          onChange={(e) => handleMemberChange(index, e.target.value)}
+        >
+          <option value="">Select a model</option>
+          {modelOptions.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    return (
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => handleMemberChange(index, e.target.value)}
+        placeholder="provider/model-name"
+      />
+    );
+  };
+
+  const chairmanSelect = hasModels ? (
+    <select
+      value={chairmanModel}
+      onChange={(e) => setChairmanModel(e.target.value)}
+    >
+      <option value="">Select a model</option>
+      {modelOptions.map((model) => (
+        <option key={model.id} value={model.id}>
+          {model.label}
+        </option>
+      ))}
+    </select>
+  ) : (
+    <input
+      type="text"
+      value={chairmanModel}
+      onChange={(e) => setChairmanModel(e.target.value)}
+      placeholder="provider/model-name"
+    />
+  );
 
   return (
     <div className="settings-overlay" onClick={onClose}>
@@ -59,10 +130,8 @@ export default function SettingsDrawer({
           <div>
             <h3>Settings</h3>
             <p className="settings-subtitle">
-              Configure council members and the chairman model.
-              <br />
-              <strong>Note:</strong> Backend still uses values from
-              <code className="inline-code"> backend/config.py</code>.
+              Configure council members and the chairman model. Pick from the available
+              OpenRouter catalog or enter IDs manually if none are loaded.
             </p>
           </div>
           <button className="close-btn" type="button" onClick={onClose}>
@@ -71,19 +140,39 @@ export default function SettingsDrawer({
         </div>
 
         <form className="settings-body" onSubmit={handleSave}>
+          {error && <div className="settings-banner warning">{error}</div>}
+          {modelsSource && (
+            <div className="settings-banner info">
+              Models source: {modelsSource}.
+              {onReload && (
+                <button
+                  type="button"
+                  className="ghost-btn inline"
+                  onClick={onReload}
+                  disabled={isLoading}
+                >
+                  Refresh
+                </button>
+              )}
+            </div>
+          )}
+          {isLoading && (
+            <div className="settings-banner info">Loading settings and models...</div>
+          )}
+
           <section className="settings-section">
             <div className="section-title">
               <div>
                 <h4>Council members</h4>
                 <p className="section-help">
-                  List of OpenRouter model identifiers. These are the models that will
-                  debate in Stage 1 and rank in Stage 2.
+                  Models that will debate in Stage 1 and rank peers in Stage 2.
                 </p>
               </div>
               <button
                 type="button"
                 className="ghost-btn"
                 onClick={handleAddMember}
+                disabled={isLoading}
               >
                 + Add member
               </button>
@@ -92,19 +181,13 @@ export default function SettingsDrawer({
             <div className="model-list">
               {councilModels.map((model, index) => (
                 <div className="model-row" key={index}>
-                  <input
-                    type="text"
-                    value={model}
-                    onChange={(e) =>
-                      handleMemberChange(index, e.target.value)
-                    }
-                    placeholder="provider/model-name"
-                  />
+                  {renderCouncilInput(model, index)}
                   <button
                     type="button"
                     className="ghost-btn danger"
                     onClick={() => handleRemoveMember(index)}
                     aria-label={`Remove council member ${index + 1}`}
+                    disabled={isLoading}
                   >
                     Remove
                   </button>
@@ -123,32 +206,33 @@ export default function SettingsDrawer({
             <p className="section-help">
               The chairman synthesizes the final Stage 3 answer.
             </p>
-            <input
-              type="text"
-              value={chairmanModel}
-              onChange={(e) => setChairmanModel(e.target.value)}
-              placeholder="provider/model-name"
-            />
-          </section>
-
-          <section className="settings-section">
-            <h4>Upcoming</h4>
-            <p className="section-help">
-              Next iteration: fetch available models from OpenRouter and persist
-              settings server-side so the backend uses your choices.
-            </p>
+            {chairmanSelect}
           </section>
 
           <div className="settings-actions">
-            <button type="button" className="ghost-btn" onClick={onReset}>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={onReset}
+              disabled={isLoading || isSaving}
+            >
               Reset to defaults
             </button>
             <div className="action-right">
-              <button type="button" className="ghost-btn" onClick={onClose}>
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={onClose}
+                disabled={isSaving}
+              >
                 Cancel
               </button>
-              <button type="submit" className="primary-btn">
-                Save settings
+              <button
+                type="submit"
+                className="primary-btn"
+                disabled={isSaving || isLoading}
+              >
+                {isSaving ? 'Saving...' : 'Save settings'}
               </button>
             </div>
           </div>

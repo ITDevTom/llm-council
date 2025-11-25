@@ -118,13 +118,21 @@
   min-width: 0;
 }
 
-.settings-section input {
+.model-row select {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-section input,
+.settings-section select {
   width: 100%;
   display: block;
 }
 
 .model-row input,
-.settings-section input {
+.model-row select,
+.settings-section input,
+.settings-section select {
   padding: 12px;
   border: 1px solid var(--muted-border);
   border-radius: 8px;
@@ -134,7 +142,9 @@
 }
 
 .model-row input:focus,
-.settings-section input:focus {
+.model-row select:focus,
+.settings-section input:focus,
+.settings-section select:focus {
   border-color: var(--accent);
   outline: none;
   box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
@@ -150,6 +160,12 @@
   font-weight: 600;
   font-size: 13px;
   transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.ghost-btn.inline {
+  margin-left: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
 }
 
 .ghost-btn:hover {
@@ -198,4 +214,24 @@
 .primary-btn:hover {
   background: var(--accent-strong);
   border-color: var(--accent-strong);
+}
+
+.settings-banner {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.settings-banner.warning {
+  border-color: #e06666;
+  color: #e06666;
+  background: rgba(224, 102, 102, 0.08);
+}
+
+.settings-banner.info {
+  border-color: var(--muted-border);
+  color: var(--text-secondary);
+  background: var(--surface-alt);
 }
